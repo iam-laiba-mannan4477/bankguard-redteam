@@ -19,6 +19,14 @@ Be specific: name the tool, say what you tried, what happened, what would help.
 - Empty `content` with reasoning in extra fields:
 - Safety/guard model availability on Token Factory:
 - Latency and cost observations:
+- Oct 26: no dedicated NVIDIA safety or guard model appears in the Token Factory model list (30 models)
+- Oct 27: tool calling works on Nano (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B) and Super (nvidia/nemotron-3-super-120b-a12b) via the OpenAI-compatible API, including a tool-result round trip.
+- Reasoning models return content=None on tool-call turns; reasoning text is in message.model_extra['reasoning'] (Super also has 'reasoning_content').
+- No dedicated NVIDIA guard/safety model in the 30-model list.
+- Nano test: 471 tokens total. Super shows prompt cache hits (352 cached tokens).
+
+
+
 
 ## What worked well
 -
