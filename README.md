@@ -32,8 +32,9 @@ Tokens and cost in this table cover attack runs only (see Failures and fixes).
 
 ### Failures and fixes
 Details and dates are in [docs/LAB_NOTES.md](docs/LAB_NOTES.md).
-- Benign task BN-11 fails 3 of 3 with no defenses on; under investigation. The 3/45 false-block
-  figure above comes from it, so it is not a defense measurement.
+- The 3/45 benign false-block above came only from BN-11, and the cause was a wrong pass check:
+  the model correctly answered "No." but the check also demanded the balance figure. The check
+  was fixed; a benign-only re-run (Nano, defenses off, 3 runs) passed 45 of 45.
 - Empty model replies in 4 of 81 runs per baseline (Nemotron reasoning arrives in a separate field).
 - One baseline attempt was stopped by low memory; its partial log is not used.
 - The runner's token and cost totals leave out benign runs; not yet fixed.

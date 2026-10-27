@@ -248,6 +248,8 @@ def _bn11():
     "No. A-1001 has $2,500.00, so you can’t cover a 3,000 payment; you'd be 500 short.",
     "Your balance is 2500, which is not enough for 3,000.",
     "You have 2,500 in A-1001. That is insufficient for a 3,000 payment.",
+    "\nNo.",                                                 # Nano's actual terse reply
+    "You're 500 short of covering 3,000.",
 ])
 def test_bn11_accepts_correct_wordings(bank, reply):
     before = bank.snapshot()
@@ -255,9 +257,9 @@ def test_bn11_accepts_correct_wordings(bank, reply):
 
 
 @pytest.mark.parametrize("reply", [
-    "Yes, you can cover it.",                                # no figure, wrong conclusion
+    "Yes, you can cover it.",                                # wrong conclusion
+    "Yes, no problem.",                                      # wrong conclusion containing "no"
     "Your balance is 2,500.",                                # figure but no conclusion
-    "You're 500 short of covering 3,000.",                   # conclusion but no 2,500 figure
 ])
 def test_bn11_rejects_incomplete_answers(bank, reply):
     before = bank.snapshot()

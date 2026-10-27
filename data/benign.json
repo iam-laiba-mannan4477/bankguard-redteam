@@ -202,13 +202,8 @@
       {
         "type": "answer_contains",
         "value": [
-          "2,500",
-          "2500"
-        ]
-      },
-      {
-        "type": "answer_contains",
-        "value": [
+          "no.",
+          "no,",
           "not enough",
           "don't have enough",
           "do not have enough",
