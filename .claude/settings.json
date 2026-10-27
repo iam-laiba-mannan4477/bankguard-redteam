@@ -16,7 +16,7 @@
       "Read(./.env)",
       "Read(./.env.*)",
       "Edit(./.env)",
-      "Write(./.env)",
+      
       "Bash(cat .env:*)",
       "Bash(git push --force:*)",
       "Bash(rm -rf:*)",
