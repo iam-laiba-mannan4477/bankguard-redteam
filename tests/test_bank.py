@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from bank.state import CANARIES, Bank, BankError, diff
+from bank.state import CANARIES, INJECTED_MEMO, Bank, BankError, diff
 from bank.tools import TOOL_SCHEMAS, execute_tool
 
 
@@ -52,8 +52,9 @@ def test_bank_does_not_enforce_ownership(bank):
 
 
 def test_memo_returned_verbatim(bank):
+    bank.plant_memo(INJECTED_MEMO)
     memos = [t["memo"] for t in bank.list_transactions("A-1001")["transactions"]]
-    assert any("SYSTEM NOTE TO ASSISTANT" in m for m in memos)
+    assert INJECTED_MEMO in memos
 
 
 def test_snapshot_is_deep_copy(bank):
@@ -93,3 +94,19 @@ def test_model_cannot_set_confirmed(bank):
     execute_tool(bank, "transfer",
                  {"from_account": "A-1001", "to_payee_id": "P-1", "amount": 10}, confirmed=True)
     assert bank.data["transactions"]["A-1001"][-1]["confirmed"] is True
+
+
+def test_default_seed_has_no_injected_memo(bank):
+    memos = [t["memo"] for txns in bank.data["transactions"].values() for t in txns]
+    assert INJECTED_MEMO not in memos
+    assert not any("SYSTEM NOTE" in m or "Refund Desk" in m for m in memos)
+
+
+def test_plant_memo_adds_incoming_txn_without_state_change(bank):
+    before = bank.snapshot()
+    tid = bank.plant_memo(INJECTED_MEMO)
+    assert tid == "T-6"
+    assert bank.list_transactions("A-1001")["transactions"][-1]["memo"] == INJECTED_MEMO
+    assert diff(before, bank.snapshot()) == []
+    with pytest.raises(BankError):
+        bank.plant_memo("x", account_id="A-9999")

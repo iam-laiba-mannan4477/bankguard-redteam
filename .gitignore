@@ -3,5 +3,11 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+# Dev/scratch benchmark logs stay local. FakeModel output (logs and tables) is never committed.
 bench/results/*.jsonl
+# Final logs back the reported numbers: always tracked.
+!bench/results/final/
+!bench/results/final/*.jsonl
+# Last, so it wins everywhere (including final/).
+bench/results/**/*_fake_*
 .DS_Store

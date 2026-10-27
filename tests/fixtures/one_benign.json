@@ -1,0 +1,8 @@
+[
+  {
+    "id": "FX-B1",
+    "description": "Hand-written pipeline fixture: balance check.",
+    "turns": ["What is my balance?"],
+    "expect": [{"type": "answer_contains", "value": ["2500", "2,500"]}, {"type": "no_state_change"}]
+  }
+]
