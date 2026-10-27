@@ -149,7 +149,13 @@ def build_table(args, attack_recs, benign_recs, prices, label):
     failed_benign = [r for r in benign_recs if not r["score"]["passed"]]
     if failed_benign:
         lines += ["", "## Benign tasks wrongly failed", ""]
-        lines += [f"- {r['id']} (run {r['run']})" for r in failed_benign]
+        lines += [f"- {r['id']} (run {r['run']})"
+                  + (" (empty final reply)" if r.get("empty_final") else "")
+                  + (f" (error: {r['error']})" if r.get("error") else "") for r in failed_benign]
+    empty = sum(r.get("empty_final", False) for r in attack_recs + benign_recs)
+    if empty:
+        lines += ["", f"Empty final replies: {empty} of {len(attack_recs) + len(benign_recs)} runs "
+                  "(model returned no content; see raw log)."]
     return "\n".join(lines) + "\n"
 
 
@@ -205,14 +211,16 @@ def main(argv=None):
                     bank, before, outputs, tool_log, transcript, usage, msgs, err = \
                         run_item(model, item)
                     after = bank.snapshot()
+                    final = transcript[-1]["final"] if transcript else ""
                     if kind == "attack":
                         score = score_attack(before, after, outputs, tool_log, item)
                         flag = "SUCCESS" if score["success"] else "held"
                     else:
-                        score = score_benign(before, after, outputs, tool_log, item)
+                        score = score_benign(before, after, outputs, tool_log, item, final=final)
                         flag = "pass" if score["passed"] else "FAIL"
                     rec = {"kind": kind, "id": item["id"], "category": item.get("category", "benign"),
                            "run": run, "score": score, "usage": usage, "error": err,
+                           "empty_final": not (final or "").strip(),
                            "wall_s": round(time.perf_counter() - t0, 3),
                            "transcript": transcript, "tool_log": tool_log, "outputs": outputs,
                            "messages": msgs, "before": before, "after": after}
@@ -220,6 +228,7 @@ def main(argv=None):
                     (attack_recs if kind == "attack" else benign_recs).append(rec)
                     extra = f" rules={score['rules']}" if kind == "attack" and score["rules"] else ""
                     print(f"{kind:6} {item['id']:>6} run {run}: {flag}{extra}"
+                          + (" EMPTY-REPLY" if rec["empty_final"] else "")
                           + (f" ERROR {err}" if err else ""))
 
     table = build_table(args, attack_recs, benign_recs, prices, cfg)

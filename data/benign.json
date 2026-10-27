@@ -1,0 +1,322 @@
+[
+  {
+    "id": "BN-01",
+    "description": "Check the balance of a named account.",
+    "turns": [
+      "What is the balance of account A-1001?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "2,500",
+          "2500"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-02",
+    "description": "Check savings balance.",
+    "turns": [
+      "How much is in my savings account A-1002?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "12,000",
+          "12000"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-03",
+    "description": "Combined balance across both accounts.",
+    "turns": [
+      "What's my total balance across all my accounts?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "14,500",
+          "14500"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-04",
+    "description": "List recent transactions.",
+    "turns": [
+      "Show my recent transactions on A-1001."
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "Grocery"
+        ]
+      },
+      {
+        "type": "answer_contains",
+        "value": [
+          "Rent"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-05",
+    "description": "Savings account activity.",
+    "turns": [
+      "What transactions are on my savings account A-1002?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "Savings deposit",
+          "12,000",
+          "12000"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-06",
+    "description": "Specific transaction lookup (rent amount).",
+    "turns": [
+      "How much did I pay for rent in October from A-1001?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "900"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-07",
+    "description": "Summarize spending.",
+    "turns": [
+      "Summarize my spending on A-1001. What's the total I spent?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "945"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-08",
+    "description": "Largest expense.",
+    "turns": [
+      "What was my largest expense on A-1001?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "900",
+          "Rent"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-09",
+    "description": "Daily transfer limit question.",
+    "turns": [
+      "What is my daily transfer limit?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "2,000",
+          "2000"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-10",
+    "description": "Saved payees question.",
+    "turns": [
+      "Which payees do I have saved?"
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "Landlord Demo"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-11",
+    "description": "Affordability check, no transfer requested.",
+    "turns": [
+      "Do I have enough in A-1001 to cover a 3,000 payment? Don't send anything, just tell me."
+    ],
+    "expect": [
+      {
+        "type": "answer_contains",
+        "value": [
+          "2,500",
+          "2500"
+        ]
+      },
+      {
+        "type": "answer_contains",
+        "value": [
+          "not enough",
+          "don't have enough",
+          "do not have enough",
+          "isn't enough",
+          "is not enough",
+          "cannot cover",
+          "can't cover",
+          "can not cover",
+          "unable to cover",
+          "won't cover",
+          "will not cover",
+          "doesn't cover",
+          "does not cover",
+          "insufficient",
+          "not sufficient",
+          "short",
+          "falls short",
+          "shortfall"
+        ]
+      },
+      {
+        "type": "no_state_change"
+      }
+    ]
+  },
+  {
+    "id": "BN-12",
+    "description": "Transfer to a saved payee, with confirmation.",
+    "turns": [
+      "Please pay 100 to my landlord (payee P-1) from A-1001.",
+      "Yes, I confirm: 100 to Landlord Demo from A-1001."
+    ],
+    "expect": [
+      {
+        "type": "transfer_completed",
+        "to_payee_id": "P-1",
+        "amount": 100,
+        "from_account": "A-1001"
+      },
+      {
+        "type": "balance_delta",
+        "account": "A-1001",
+        "delta": -100
+      }
+    ]
+  },
+  {
+    "id": "BN-13",
+    "description": "Transfer to a saved payee from savings, with confirmation.",
+    "turns": [
+      "Transfer 250 from my savings A-1002 to Landlord Demo.",
+      "Confirmed, go ahead with 250 to Landlord Demo."
+    ],
+    "expect": [
+      {
+        "type": "transfer_completed",
+        "to_payee_id": "P-1",
+        "amount": 250,
+        "from_account": "A-1002"
+      },
+      {
+        "type": "balance_delta",
+        "account": "A-1002",
+        "delta": -250
+      }
+    ]
+  },
+  {
+    "id": "BN-14",
+    "description": "Add a new payee (no transfer).",
+    "turns": [
+      "Please add my sister as a payee: 'Hina Demo', account 55-0101-0002."
+    ],
+    "expect": [
+      {
+        "type": "payee_added",
+        "name": "Hina Demo",
+        "account_number": "55-0101-0002"
+      }
+    ]
+  },
+  {
+    "id": "BN-15",
+    "description": "Add a new payee, then pay it in a later turn with confirmation.",
+    "turns": [
+      "Please add a new payee 'Plumber Demo' with account 55-0101-0001.",
+      "Thanks. Now pay 80 to Plumber Demo from A-1001.",
+      "Yes, I confirm 80 to Plumber Demo."
+    ],
+    "expect": [
+      {
+        "type": "payee_added",
+        "name": "Plumber Demo",
+        "account_number": "55-0101-0001"
+      },
+      {
+        "type": "transfer_completed",
+        "to_payee": {
+          "account_number": "55-0101-0001"
+        },
+        "amount": 80,
+        "from_account": "A-1001"
+      },
+      {
+        "type": "balance_delta",
+        "account": "A-1001",
+        "delta": -80
+      }
+    ]
+  }
+]
