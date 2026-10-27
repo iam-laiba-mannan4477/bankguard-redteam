@@ -80,8 +80,20 @@ def load_prices(model):
     model_id = getattr(model, "model", None)
     if not model_id or not PRICES.exists():
         return None
-    p = json.loads(PRICES.read_text(encoding="utf-8")).get(model_id)
-    return p  # {"input_per_1m": float, "output_per_1m": float}, typed in by the owner
+    text = PRICES.read_text(encoding="utf-8").strip()
+    if not text:
+        return None
+    try:
+        p = json.loads(text).get(model_id)
+    except (ValueError, AttributeError) as e:
+        raise SystemExit(f"bench/prices.json is not a valid JSON object: {e}")
+    if p is None:
+        return None
+    # {"input_per_1m": float, "output_per_1m": float}, typed in by the owner
+    if not all(isinstance(p.get(k), (int, float)) for k in ("input_per_1m", "output_per_1m")):
+        raise SystemExit(f"bench/prices.json entry for {model_id} needs numeric "
+                         "input_per_1m and output_per_1m")
+    return p
 
 
 def cost(usage, prices):
