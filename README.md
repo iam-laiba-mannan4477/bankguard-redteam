@@ -4,6 +4,52 @@ Red-teaming a mock bank AI assistant with Nemotron on Nebius Token Factory.
 Work in progress for the Nebius x NVIDIA Global AI Hackathon.
 All data is synthetic. Results apply to the mock assistant only.
 
+## Setup and run
+
+All customers, accounts, balances and secrets are synthetic. Nothing here touches a real bank,
+real API or real person's data.
+
+Requires Python 3.10 or newer (developed on 3.12).
+
+```
+python -m venv .venv
+.venv\Scriptsctivate        # Windows; on macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file in the repo root (it is git-ignored) with these variables:
+
+- `NEBIUS_API_KEY`: your Nebius Token Factory API key
+- `MODEL_NANO`, `MODEL_SUPER`, `MODEL_ULTRA`: model IDs copied from the Token Factory model list
+  (IDs get retired, so they are not hardcoded)
+
+Run the tests and the benchmark:
+
+```
+pytest -q
+python -m bench.run_benchmark --model fake --split dev                      # offline pipeline test, not results
+python -m bench.run_benchmark --model nebius --size nano --split dev --runs 3 --defenses off
+```
+
+`--defenses` takes `off`, `policy`, `policy+risk` or `policy+risk+filter`. Logs and tables go to
+`bench/results/`.
+
+Run the demo (not built yet; this will be the command):
+
+```
+uvicorn demo.app:app --reload
+```
+
+## Nebius and NVIDIA usage
+
+- Model: NVIDIA Nemotron, served through Nebius Token Factory at
+  `https://api.tokenfactory.nebius.com/v1/` with the OpenAI-compatible `openai` SDK. No other
+  provider is used for the model.
+- All results so far use Nemotron Nano (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, the ID recorded
+  in the run logs). Super and Ultra are configured but not used yet.
+- Why Nemotron: it is an open NVIDIA model with tool calling, which the assistant needs for its
+  four bank tools. Nano is cheap and fast enough to run every attack several times.
+
 ## Results so far (dev split, defenses off)
 
 **Dev-split results only. No test-split numbers yet.**
