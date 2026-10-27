@@ -13,7 +13,7 @@ Requires Python 3.10 or newer (developed on 3.12).
 
 ```
 python -m venv .venv
-.venv\Scriptsctivate        # Windows; on macOS/Linux: source .venv/bin/activate
+.venv\Scripts\activate        # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
