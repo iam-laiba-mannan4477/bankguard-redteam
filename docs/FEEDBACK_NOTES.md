@@ -24,6 +24,15 @@ Be specific: name the tool, say what you tried, what happened, what would help.
 - Reasoning models return content=None on tool-call turns; reasoning text is in message.model_extra['reasoning'] (Super also has 'reasoning_content').
 - No dedicated NVIDIA guard/safety model in the 30-model list.
 - Nano test: 471 tokens total. Super shows prompt cache hits (352 cached tokens).
+- Oct 27: assistant-loop smoke test on Nano ("What is my balance?", 2 tool rounds, 3 calls):
+  3,208 completion tokens vs 2,377 prompt tokens, 15.4 s total. Reasoning output dominates
+  completion tokens on a simple two-tool request, which drives cost. A per-request reasoning
+  budget or a documented way to turn reasoning down would help.
+- Oct 27: behavior varied between runs of the same request: one run called get_balance on one
+  account (A-1001), another called it on both accounts and summed them. Benchmark uses multiple runs.
+- Oct 27: Nano's answer contained a non-breaking hyphen (U+2011). On a Windows console (cp1252)
+  print() raised `UnicodeEncodeError: 'charmap' codec can't encode character '‑'`.
+  Fix: reconfigure stdout to UTF-8 in our scripts. Worth a note in the Token Factory quickstart.
 
 
 
