@@ -40,9 +40,9 @@ def test_end_to_end_fake_on_fixture(tmp_path, monkeypatch, capsys):
     assert len(list(tmp_path.glob("*.jsonl"))) == 1 and len(list(tmp_path.glob("*.md"))) == 1
 
 
-def test_unimplemented_defenses_refused():
-    with pytest.raises(SystemExit, match="not implemented"):
-        rb.main(["--model", "fake", "--defenses", "policy"])
+def test_unknown_defense_config_refused():
+    with pytest.raises(SystemExit):
+        rb.main(["--model", "fake", "--defenses", "all"])
 
 
 def test_seed_memo_comes_only_from_setup():

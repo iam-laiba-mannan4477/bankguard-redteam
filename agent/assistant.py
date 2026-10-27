@@ -1,7 +1,7 @@
 """Assistant loop: system prompt, up to MAX_TOOL_ROUNDS tool-call rounds, final answer.
 
-Undefended by default. `gate(name, args) -> (allowed, reason, confirmed)` is the hook the
-defense layer plugs into.
+Undefended by default. Defenses plug in through `guard` (defenses.guard.Guard, one per
+conversation). `gate(name, args) -> (allowed, reason, confirmed)` is a simpler hook for tests.
 """
 import json
 
@@ -20,19 +20,31 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_system_prompt(bank: Bank):
+def build_system_prompt(bank: Bank, guard=None):
     cust = bank.data["customers"][bank.session_customer]
-    payees = ", ".join(f"{pid} {p['name']}" for pid, p in cust["payees"].items()) or "none"
-    return SYSTEM_PROMPT.format(customer=bank.session_customer,
-                                accounts=", ".join(cust["accounts"]), payees=payees)
+    saved = cust["payees"]
+    if guard and guard.cfg.policy:
+        from defenses.policy import wrap_payee_names
+        saved = wrap_payee_names(saved)
+    payees = ", ".join(f"{pid} {p['name']}" for pid, p in saved.items()) or "none"
+    prompt = SYSTEM_PROMPT.format(customer=bank.session_customer,
+                                  accounts=", ".join(cust["accounts"]), payees=payees)
+    return prompt + (guard.system_prompt_suffix() if guard else "")
 
 
-def run_turn(model, bank: Bank, user_text, history=None, gate=None, max_rounds=MAX_TOOL_ROUNDS):
+def run_turn(model, bank: Bank, user_text, history=None, gate=None, max_rounds=MAX_TOOL_ROUNDS,
+             guard=None):
     """Run one user turn. Returns dict(final, messages, tool_log, usage, rounds, capped)."""
     messages = list(history) if history else [
-        {"role": "system", "content": build_system_prompt(bank)}]
+        {"role": "system", "content": build_system_prompt(bank, guard)}]
     messages.append({"role": "user", "content": user_text})
     tool_log, outputs = [], []
+    if guard:
+        note, executed = guard.start_turn(user_text)
+        tool_log += executed
+        if note:
+            messages.append({"role": "system", "content": note})
+    show = guard.filter if guard else (lambda text: text)
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "latency_s": 0.0, "calls": 0}
 
     def _add_usage(u):
@@ -44,6 +56,7 @@ def run_turn(model, bank: Bank, user_text, history=None, gate=None, max_rounds=M
     while True:
         reply = model.chat(messages, TOOL_SCHEMAS)
         _add_usage(reply.usage)
+        reply.content = show(reply.content)
         if reply.content:
             outputs.append(reply.content)
         if not reply.tool_calls:
@@ -60,15 +73,26 @@ def run_turn(model, bank: Bank, user_text, history=None, gate=None, max_rounds=M
         rounds += 1
         messages.append(reply.to_openai())
         for call in reply.tool_calls:
-            allowed, reason, confirmed = gate(call.name, call.arguments) if gate else (True, "", False)
+            if guard:
+                allowed, result, confirmed = guard.check(call.name, call.arguments)
+            else:
+                allowed, reason, confirmed = gate(call.name, call.arguments) if gate else (True, "", False)
+                result = None if allowed else json.dumps({"error": f"blocked by policy: {reason}"})
             if allowed:
                 result = execute_tool(bank, call.name, call.arguments, confirmed=confirmed)
-            else:
-                result = json.dumps({"error": f"blocked by policy: {reason}"})
+                if guard:
+                    guard.after_execute(call.name, call.arguments, result)
+                    result = guard.wrap_result(call.name, result)
             tool_log.append({"round": rounds, "name": call.name, "arguments": call.arguments,
                              "allowed": allowed, "result": result})
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
+    if guard and guard.harness_message():
+        # Written by the harness, not the model: confirmation questions and hold notices.
+        extra = guard.harness_message()
+        final = f"{final}\n\n{extra}" if final else extra
+        outputs.append(extra)
+        messages.append({"role": "assistant", "content": extra})
     usage["latency_s"] = round(usage["latency_s"], 3)
     return {"final": final, "outputs": outputs, "messages": messages, "tool_log": tool_log,
             "usage": usage, "rounds": rounds, "capped": capped}

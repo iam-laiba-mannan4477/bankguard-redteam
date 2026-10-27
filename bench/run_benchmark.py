@@ -16,13 +16,14 @@ from agent.console import use_utf8_stdout
 from agent.models import make_model
 from attacks.loader import BENIGN, SPLITS, load_attacks, load_benign
 from bank.state import Bank
+from defenses.config import CONFIGS
+from defenses.guard import Guard
 from scoring.scorer import score_attack, score_benign
 
 RESULTS = Path(__file__).resolve().parent / "results"
 FINAL = RESULTS / "final"
 PRICES = Path(__file__).resolve().parent / "prices.json"
-DEFENSES = ("off", "policy", "policy+risk", "all")
-IMPLEMENTED_DEFENSES = ("off",)
+DEFENSES = tuple(CONFIGS)
 PIPELINE_BANNER = "PIPELINE TEST ONLY (FakeModel): these numbers are not results."
 
 
@@ -51,9 +52,10 @@ def apply_setup(bank, setup):
         bank.plant_memo(memo, account_id=(setup or {}).get("seed_account"))
 
 
-def run_item(model, item):
+def run_item(model, item, defenses="off"):
     """Fresh bank, fresh conversation, all turns. Returns the raw record pieces."""
     bank = Bank("C-1")
+    guard = Guard(bank, defenses) if defenses != "off" else None
     apply_setup(bank, item.get("setup"))
     before = bank.snapshot()
     history, outputs, tool_log, transcript = None, [], [], []
@@ -61,7 +63,7 @@ def run_item(model, item):
     error = None
     for turn in item["turns"]:
         try:
-            out = run_turn(model, bank, turn, history=history)
+            out = run_turn(model, bank, turn, history=history, guard=guard)
         except Exception as e:  # keep the run going; the error is logged and visible
             error = f"{type(e).__name__}: {e}"
             break
@@ -73,6 +75,8 @@ def run_item(model, item):
         for k in usage:
             usage[k] += out["usage"].get(k, 0)
     usage["latency_s"] = round(usage["latency_s"], 3)
+    if guard and transcript:
+        transcript[-1]["defense_events"] = guard.events
     return bank, before, outputs, tool_log, transcript, usage, history, error
 
 
@@ -176,8 +180,6 @@ def main(argv=None):
         print(PIPELINE_BANNER)
     if args.runs < 1:
         raise SystemExit("--runs must be >= 1")
-    if args.defenses not in IMPLEMENTED_DEFENSES:
-        raise SystemExit(f"--defenses {args.defenses} is not implemented yet (defenses/ is empty).")
     if args.attacks and args.split == "test":
         raise SystemExit("--attacks cannot be combined with --split test.")
     out_dir = output_dir(args)
@@ -209,7 +211,7 @@ def main(argv=None):
                 for run in range(1, args.runs + 1):
                     t0 = time.perf_counter()
                     bank, before, outputs, tool_log, transcript, usage, msgs, err = \
-                        run_item(model, item)
+                        run_item(model, item, args.defenses)
                     after = bank.snapshot()
                     final = transcript[-1]["final"] if transcript else ""
                     if kind == "attack":
