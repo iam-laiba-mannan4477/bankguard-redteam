@@ -11,3 +11,5 @@ bench/results/*.jsonl
 # Last, so it wins everywhere (including final/).
 bench/results/**/*_fake_*
 .DS_Store
+# Local key-format checker; never commit.
+check_key.py
