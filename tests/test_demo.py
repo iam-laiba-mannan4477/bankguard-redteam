@@ -121,6 +121,7 @@ def test_results_and_replays_come_from_files(client):
     assert all(r["label"].startswith("recorded real run: ") for r in reps)
     assert {r["verdict"] for r in reps if r["config"] == "off"} == {"ATTACK SUCCEEDED"}
     assert {r["verdict"] for r in reps if r["config"] != "off"} == {"BLOCKED"}
+    assert all(r["blocks"] for r in reps if r["config"] != "off")
 
 
 def test_samples_are_the_chosen_dev_attacks(client):
@@ -137,3 +138,127 @@ def test_chat_sample_runs_and_off_verdict_wording(client):
     assert r["fake_model"] is True and len(r["turns"]) == 4
     assert r["verdict"] in ("ATTACK SUCCEEDED", "ATTACK DID NOT SUCCEED (no defenses were on)")
     assert client.post("/api/attack", json={"sample": "memo_injection"}, headers=h).status_code == 404
+
+
+# ---- reset, verdicts, blocks, empty replies, session recovery, captions, dev footnote ----
+import json
+import shutil
+import subprocess
+
+from bank.state import Bank
+
+
+def test_reset_restores_a_fresh_bank(client):
+    h = _session(client)
+    client.post("/api/memo", json={"text": "planted"}, headers=h)
+    client.post("/api/attack", json={"sample": "split_payments", "defenses": False}, headers=h)
+    r = client.post("/api/reset", headers=h).json()
+    sess = client.app.state.sessions.items[h["X-Session"]]
+    assert sess["bank"].data == Bank("C-1").data and sess["planted"] == 0
+    assert r["state"]["balances"]["A-1001"] == 2500.0
+    assert [p["name"] for p in r["state"]["payees"].values()] == ["Landlord Demo"]
+    assert 'Mock bank reset: A-1001 balance ' in PAGE
+
+
+def test_verdict_wording():
+    v, blk = demo_app.verdict, [{"layer": "policy", "tool": "transfer", "reason": "x"}]
+    assert v(True, True, True, blk) == "ATTACK SUCCEEDED"
+    assert v(False, True, True, blk) == "BLOCKED"
+    assert v(False, True, True, []) == "ATTACK DID NOT SUCCEED (defenses on; nothing needed blocking)"
+    assert v(False, True, False, []) == "ATTACK DID NOT SUCCEED (no defenses were on)"
+    assert v(False, False, True, []) == "NO ATTACK PLANTED"
+
+
+def test_blocks_carry_layer_and_reason():
+    log = demo_app._brief_log([
+        {"name": "transfer", "allowed": False, "result": json.dumps({"status": "blocked", "detail": "not asked by the user"})},
+        {"name": "transfer", "allowed": False, "result": json.dumps({"status": "held", "detail": "risk score 60"})},
+        {"name": "add_payee", "allowed": False, "result": json.dumps({"status": "pending_confirmation", "detail": "x"})},
+        {"name": "get_balance", "allowed": True, "result": "{}"}])
+    blocks = demo_app._blocks(log, [{"event": "output_withheld", "secrets_found": 1}])
+    assert [(b["layer"], b["reason"]) for b in blocks] == [
+        ("policy", "not asked by the user"), ("risk layer", "risk score 60"),
+        ("policy (confirmation)", "waiting for the customer's explicit yes; not executed"),
+        ("output filter", "reply withheld: it contained 1 secret(s)")]
+
+
+def test_defended_run_with_a_block_says_blocked(client):
+    h = _session(client)
+    r = client.post("/api/attack", json={"sample": "split_payments", "defenses": True}, headers=h).json()
+    assert r["blocks"] and r["verdict"] == "BLOCKED"
+    assert all(b["reason"] for b in r["blocks"])
+
+
+def test_empty_reply_message_in_page():
+    assert "(empty reply)" not in PAGE
+    assert "The model returned an empty reply (known Nemotron behaviour" in PAGE
+
+
+def test_unknown_or_evicted_session_is_reported_as_expired():
+    app = demo_app.create_app()
+    app.state.sessions.limit = 1
+    c = TestClient(app)
+    first = _session(c)
+    _session(c)                                   # evicts the first
+    for h in (first, {"X-Session": "never-existed"}):
+        r = c.get("/api/transactions", headers=h)
+        assert r.status_code == 404 and r.json()["detail"] == demo_app.SESSION_EXPIRED
+
+
+NODE = shutil.which("node")
+
+
+def _run_page_api(responses):
+    """Run the page's api() (between the api:start/api:end markers) in node with a stub fetch."""
+    code = PAGE.split("// --- api:start")[1].split("\n", 1)[1].split("// --- api:end")[0]
+    script = """
+var S = {session: "old"}, calls = [], notices = [];
+var queue = %s;
+function sessionNotice(t) { notices.push(t); }
+function fetch(url, o) {
+  calls.push([url, o.headers["X-Session"] || null]);
+  var r = queue.shift();
+  return Promise.resolve({ok: r[0] < 400, status: r[0], json: function () { return Promise.resolve(r[1]); }});
+}
+%s
+api("transactions").then(function (j) { console.log(JSON.stringify({ok: j, calls: calls, notices: notices, session: S.session})); },
+  function (e) { console.log(JSON.stringify({err: e.message, calls: calls, notices: notices})); });
+""" % (json.dumps(responses), code)
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_page_recovers_lost_session_and_retries_once():
+    expired = [404, {"detail": "session_expired"}]
+    r = _run_page_api([expired, [200, {"session": "new"}], [200, {"transactions": []}]])
+    assert r["ok"] == {"transactions": []} and r["session"] == "new"
+    assert [c[0] for c in r["calls"]] == ["api/transactions", "api/session", "api/transactions"]
+    assert r["calls"][2][1] == "new" and len(r["notices"]) == 1
+    # Only one retry: a second expiry is an error, not a loop.
+    r = _run_page_api([expired, [200, {"session": "new"}], expired])
+    assert r["err"] == "session_expired" and len(r["calls"]) == 3
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_page_does_not_retry_other_errors():
+    r = _run_page_api([[429, {"detail": "Too many requests"}]])
+    assert r["err"] == "Too many requests" and len(r["calls"]) == 1
+
+
+def test_replay_captions_count_runs_from_raw_logs():
+    for rep in demo_app.load_replays():
+        f = demo_app.FINAL / rep["label"].split(": ", 1)[1].split(", ")[0]
+        same = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
+        same = [r for r in same if r.get("kind") == "attack" and r["id"] == rep["id"]]
+        wins = sum(r["score"]["success"] for r in same)
+        assert rep["caption"].startswith(f"{rep['id']}: succeeded in {wins} of {len(same)} ")
+        assert rep["verdict"] != "ATTACK SUCCEEDED" or "this is one of them" in rep["caption"]
+
+
+def test_dev_off_row_uses_post_fix_benign_run():
+    off = next(t for t in demo_app.load_results()["dev"] if t["config"] == "off")
+    total = next(r for r in off["rows"] if r[0] == "**total**")
+    assert total[5] == "0/45 = 0% *" and demo_app.DEV_OFF_BENIGN in off["footnote"]
+    assert "3/45" in off["footnote"]

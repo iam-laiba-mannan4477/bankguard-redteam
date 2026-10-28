@@ -81,6 +81,7 @@ the bank state and the reply. No LLM judge.</p>
   <div id="plainOut" class="hidden"><h3>Transactions (read directly from the mock bank)</h3><div class="scroll" id="plainTable"></div></div>
   <div style="margin-top:8px"><button id="btnReset">Reset my mock bank</button>
     <span class="muted">Each visitor gets a separate fresh copy.</span></div>
+  <div id="resetMsg" class="notice hidden" role="status"></div>
 </section>
 
 <section class="card" id="attacker">
@@ -149,18 +150,32 @@ function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; 
 function show(n, on) { n.classList.toggle("hidden", !on); }
 function str(v) { return typeof v === "string" ? v : JSON.stringify(v); }
 
-function api(path, opts) {
-  opts = opts || {};
+// --- api:start (tested in tests/test_demo.py with node)
+function request(path, opts) {
   var headers = {"Content-Type": "application/json"};
   if (S.session) headers["X-Session"] = S.session;
   return fetch("api/" + path, {method: opts.method || "GET", headers: headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined}).then(function (r) {
     return r.json().catch(function () { return {}; }).then(function (j) {
-      if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+      if (!r.ok) { var e = new Error(j.detail || ("HTTP " + r.status)); e.status = r.status; e.detail = j.detail; throw e; }
       return j;
     });
   });
 }
+// If the server lost our session (restart, free-tier spin-down), get a new one and retry once.
+function api(path, opts) {
+  opts = opts || {};
+  return request(path, opts).catch(function (e) {
+    if (e.status !== 404 || e.detail !== "session_expired" || path === "session") throw e;
+    return request("session", {method: "POST"}).then(function (j) {
+      S.session = j.session;
+      sessionNotice("The demo server restarted, so you have a fresh mock bank (any note you added is gone). Your action was retried once.");
+      return request(path, opts);
+    });
+  });
+}
+// --- api:end
+function sessionNotice(text) { var n = $("modeNotice"); n.textContent = text; show(n, true); }
 function staticData(name) { return fetch("data/" + name + ".json").then(function (r) { return r.json(); }); }
 function getData(name) { return S.static ? staticData(name) : api(name); }
 
@@ -191,27 +206,36 @@ function stateView(st) {
   return table(["item", "value"], rows);
 }
 
-function toolView(log) {
-  if (!log.length) return el("p", {cls: "muted", text: "No tool calls."});
-  return table(["tool", "arguments", "allowed", "result"], log.map(function (t) {
-    var allowed = t.executed_by ? "yes (after user yes)" : (t.allowed ? "allowed" : "BLOCKED / held");
-    return [t.name, str(t.arguments), allowed, t.result || ""];
-  }));
+function toolView(log, blocks) {
+  var rows = log.map(function (t) {
+    var outcome = t.executed_by ? "executed after the customer's yes"
+      : t.allowed ? "allowed" : "STOPPED by " + t.blocked_by + ": " + t.reason;
+    return [t.name, str(t.arguments), outcome, t.result || ""];
+  });
+  blocks.filter(function (b) { return b.layer === "output filter"; }).forEach(function (b) {
+    rows.push(["(reply)", "", "STOPPED by output filter: " + b.reason, ""]);
+  });
+  if (!rows.length) return el("p", {cls: "muted", text: "No tool calls, nothing blocked."});
+  return table(["tool", "arguments", "policy / risk / filter", "result"], rows);
 }
 
 function showRun(r, title) {
-  show($("panels"), true);
+  show($("panels"), true); show($("resetMsg"), false);
   $("panelsTitle").textContent = title;
   var v = $("verdict");
   v.textContent = r.verdict + (r.rules && r.rules.length ? "  (" + r.rules.join(", ") + ")" : "");
   v.className = "verdict " + (r.verdict === "ATTACK SUCCEEDED" ? "bad" : r.verdict === "BLOCKED" ? "good" : "neutral");
+  if (r.caption) v.appendChild(el("div", {cls: "muted", text: r.caption}));
   if (r.verdict.indexOf("ATTACK DID NOT SUCCEED") === 0) v.textContent += ". Nothing blocked it: the model did not follow the attack this time.";
   var reply = clear($("reply"));
   (r.turns || []).forEach(function (t) {
     reply.appendChild(el("div", {cls: "muted", text: "User: " + t.user}));
-    reply.appendChild(el("div", {text: t.final || "(empty reply)"}));
+    reply.appendChild(el("div", {text: (t.final || "").trim() ? t.final :
+      "The model returned an empty reply (known Nemotron behaviour: the answer arrives in a reasoning field). Try again."}));
   });
-  clear($("toolLog")).appendChild(toolView(r.tool_log || []));
+  if (r.usage && r.usage.retries) reply.appendChild(el("div", {cls: "muted",
+    text: "Note: the server re-asked the model " + r.usage.retries + " time(s) after an empty or failed reply."}));
+  clear($("toolLog")).appendChild(toolView(r.tool_log || [], r.blocks || []));
   var ev = r.events || [];
   show($("eventsWrap"), ev.length > 0);
   clear($("events")).appendChild(table(["event", "detail"], ev.map(function (e) {
@@ -261,6 +285,7 @@ function renderResults(res) {
   }
   clear($("finalTable")).appendChild(build(res.final));
   clear($("devTable")).appendChild(build(res.dev));
+  res.dev.forEach(function (t) { if (t.footnote) $("devTable").appendChild(el("p", {cls: "muted", text: t.footnote})); });
   var files = res.final.map(function (t) { return t.file; }).concat(res.dev.map(function (t) { return t.file; }));
   $("sources").textContent = "Read from: " + files.join(", ") + ". Test benign false-block shows n/a: the benign suite was not rerun on test; see the dev table.";
 }
@@ -270,7 +295,8 @@ function renderReplays(list) {
   if (!list.length) { box.appendChild(el("p", {cls: "muted", text: "No recorded runs found."})); return; }
   list.forEach(function (r) {
     var b = el("button", null, el("b", {text: r.id + " (" + r.category + "), defenses " +
-      (r.config === "off" ? "OFF" : "ON") + ": " + r.verdict}), el("br"), el("span", {cls: "muted mono", text: r.label}));
+      (r.config === "off" ? "OFF" : "ON") + ": " + r.verdict}), el("br"), el("span", {text: r.caption}),
+      el("br"), el("span", {cls: "muted mono", text: r.label}));
     b.addEventListener("click", function () { showRun(r, "Replay: " + r.label); });
     box.appendChild(b);
   });
@@ -307,7 +333,16 @@ function init() {
   $("memo").addEventListener("input", function () { $("count").textContent = $("memo").value.length; });
   $("btnPlant").onclick = function () { plant($("memo").value.slice(0, 300)); };
   $("btnReset").onclick = function () {
-    api("reset", {method: "POST"}).then(function () { $("plantMsg").textContent = "Mock bank reset."; show($("plainOut"), false); });
+    api("reset", {method: "POST"}).then(function (j) {
+      ["reply", "toolLog", "events", "before", "after", "verdict"].forEach(function (id) { clear($(id)); });
+      show($("panels"), false); show($("plainOut"), false);
+      $("plantMsg").textContent = ""; $("memo").value = ""; $("count").textContent = "0";
+      var names = Object.keys(j.state.payees).map(function (k) { return j.state.payees[k].name; });
+      var m = $("resetMsg");
+      m.textContent = "Mock bank reset: A-1001 balance " + Number(j.state.balances["A-1001"]).toFixed(2) +
+        ", payees: " + (names.join(", ") || "none");
+      show(m, true);
+    }).catch(function (e) { $("plantMsg").textContent = "Error: " + e.message; });
   };
   $("btnPlain").onclick = function () {
     (S.static ? staticData("seed") : api("transactions")).then(function (j) { renderPlain(j.transactions); })
