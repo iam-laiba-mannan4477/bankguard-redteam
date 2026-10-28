@@ -202,3 +202,16 @@ Design choices and known costs:
   note under the final results, two earlier LAB_NOTES entries (marked as corrections),
   docs/PLAN.md video plan (it planned "memo-injection attack succeeds, then same attack blocked"),
   and the demo page limits.
+
+### 2026-10-29 (hosted static page; no defense, scoring, attack or test-file change)
+- `demo/export_static.py` now builds one self-contained `demo/static_site/index.html`: an explorer
+  over all 96 recorded attack runs in `bench/results/final/` (8 attacks x 4 configs x 3 runs), each
+  with a caption giving how many of its 3 runs succeeded (computed from the raw jsonl), the same
+  verdict rules as the live page, the results tables (with the post-fix dev "off" footnote) and the
+  README Limits. Data is embedded as JSON (no fetch, no network); text is rendered as text nodes.
+  The build fails if the data contains a key-like string or a secret env value.
+- Checked at 390 px (iframe in headless Edge): no horizontal overflow for any of the 32
+  attack/config pairs.
+- README: hosted page = replay; live demo runs locally. Render removed as a deployment target
+  (needs a payment card); `render.yaml` kept, marked reference only. Added the memo-injection and
+  output-filter limits to the README Limits, since the hosted page reads its Limits from there.

@@ -1,3 +1,4 @@
+# Reference only: not deployed. Render requires a payment card on the account.
 services:
   - type: web
     name: bankguard-demo

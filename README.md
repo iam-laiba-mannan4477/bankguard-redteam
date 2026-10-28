@@ -36,7 +36,27 @@ python -m bench.run_benchmark --model nebius --size nano --split dev --runs 3 --
 
 ### Demo
 
-Local, Windows (PowerShell, with the venv active), then open http://127.0.0.1:8000 :
+There are two parts:
+
+- **Hosted page (Hugging Face Static Space): a replay of recorded real runs.** It shows every
+  attack run from the frozen test split (4 defense configs x 8 attacks x 3 runs, Nemotron Nano on
+  Nebius Token Factory), each with the conversation, tool-call log, bank state before and after,
+  the scorer's verdict and how many of the 3 runs succeeded. It makes no model or network calls,
+  so nothing on it is live.
+- **Live demo: runs locally** with your own Token Factory key (below). This is where you can plant
+  your own memo and call Nemotron.
+
+Build the hosted page (no server, no key needed; output in `demo/static_site/`, git-ignored):
+
+```
+python -m demo.export_static
+start demo\static_site\index.html          # Windows: open it in your browser to check
+```
+
+Upload `demo/static_site/index.html` to the Static Space. The build fails if the data contains
+anything that looks like an API key or the value of a secret env variable.
+
+Live demo, local, Windows (PowerShell, with the venv active), then open http://127.0.0.1:8000 :
 
 ```
 $env:DEMO_MODEL="fake"; uvicorn demo.app:app --reload     # FAKE model: pipeline test only, page shows a red banner
@@ -61,13 +81,8 @@ Demo environment variables (server only; never sent to the browser):
 
 Each visitor gets a fresh mock bank. Model calls use max 800 tokens, a 30 s timeout and no retries.
 
-**Deploy on Render:** `render.yaml` is included. Start command:
-`uvicorn demo.app:app --host 0.0.0.0 --port $PORT`. Set `NEBIUS_API_KEY` and `MODEL_NANO` in the
-Render dashboard (Environment), not in git.
-
-**Static copy (Hugging Face Static Space, no server, no key):** `python -m demo.export_static`
-writes `demo/static_site/` (index.html + data/*.json from `bench/results/final/`). Upload that
-folder's contents. It shows replay mode and the results only.
+The live demo is not deployed anywhere public. `render.yaml` is kept for reference only:
+deploying on Render needs a payment card on the account, which this project does not use.
 
 ## Nebius and NVIDIA usage
 
@@ -154,6 +169,9 @@ string match on the canary that a paraphrase or encoding could likely evade (not
 - Mock bank only, synthetic data. Results apply to this mock assistant, not to real banking apps.
 - Risk timing signal never fires (fixed mock clock).
 - Test split run once per config; benign suite not rerun on test.
+- Memo injection: Nano mostly ignores it even with defenses off (dev 0 of 9; test 1 of 6), so the
+  benchmark does not show that the memo defense works.
+- The output filter is an exact string match; paraphrased or encoded leaks were not tested.
 
 ### Failures and fixes
 Details and dates are in [docs/LAB_NOTES.md](docs/LAB_NOTES.md).
