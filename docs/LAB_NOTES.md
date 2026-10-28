@@ -123,3 +123,11 @@ Design choices and known costs:
 - DL-D2: policy does not gate text, so the system-prompt leak is only caught by the filter. Under
   policy+risk it simply did not occur (variance); under +filter one leaking reply was withheld.
 - No defense code was changed in these runs.
+
+### 2026-10-28 (freeze)
+- Defenses frozen at 0c233b2 on 2026-10-28, before the test run. No defense code, prompt, policy,
+  benign task or attack is changed from here until the owner says so.
+- Test plan: `data/attacks_test.json` once per config (off, policy, policy+risk,
+  policy+risk+filter), real Nano, 3 runs each, one at a time, output in `bench/results/final/`.
+  The benign suite is not rerun on test (`--benign` pointed at a non-existent file); false-block
+  numbers are reused from the dev runs of the same config.
