@@ -120,7 +120,7 @@ the bank state and the reply. No LLM judge.</p>
     <li>Results apply only to this mock assistant (synthetic bank, four tools), not to real banks.</li>
     <li>Small samples: test 8 attacks x 3 runs, dev 12 x 3. 0 successes does not mean 0%.</li>
     <li>Dev numbers are optimistic: the defenses were built while looking at dev.</li>
-    <li>Benign false blocks were measured on dev only (45 runs). The off-config dev table counts BN-11 failures caused by a pass check that was later fixed.</li>
+    <li>Benign false blocks were measured on dev only (45 runs). The dev 'off' benign figure comes from a benign-only re-run after the BN-11 check was fixed; the attack run's own figure (3/45, all BN-11) is kept in docs/LAB_NOTES.md.</li>
     <li>The output filter is an exact string match; paraphrased or encoded leaks were not tested.</li>
     <li>Nano mostly ignores memo injection even with defenses off (dev 0 of 9; test 1 of 6), so the benchmark does not show that the memo defense works.</li>
   </ul>
