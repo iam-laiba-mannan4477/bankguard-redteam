@@ -130,6 +130,18 @@ Details and dates are in [docs/LAB_NOTES.md](docs/LAB_NOTES.md).
   their partial logs are not used.
 - Retries are logged from the defended runs on; the off run has no retry count.
 
+## How this was built
+
+- The project idea, scope, track choice, attack categories, evaluation design (dev/test split,
+  benign suite, deterministic scorer) and all decisions about what to claim were made by the
+  author, Laiba Mannan.
+- Claude Code (Anthropic) was used as an AI coding assistant under the author's direction: it wrote
+  and edited code, tests and docs, launched the benchmark runs the author specified, and drafted
+  the results write-ups. The author reviewed the results, decided on fixes and approved the
+  findings and limits stated here.
+- The assistant under test runs NVIDIA Nemotron on Nebius Token Factory.
+- Decisions the author made during the build, with dates, are in [docs/LAB_NOTES.md](docs/LAB_NOTES.md).
+
 ## Threat model and design recommendations
 
 Results apply only to this mock assistant (synthetic bank, four tools), not to real banking apps.
