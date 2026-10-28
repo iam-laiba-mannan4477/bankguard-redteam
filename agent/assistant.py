@@ -45,10 +45,10 @@ def run_turn(model, bank: Bank, user_text, history=None, gate=None, max_rounds=M
         if note:
             messages.append({"role": "system", "content": note})
     show = guard.filter if guard else (lambda text: text)
-    usage = {"prompt_tokens": 0, "completion_tokens": 0, "latency_s": 0.0, "calls": 0}
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "latency_s": 0.0, "calls": 0, "retries": 0}
 
     def _add_usage(u):
-        for k in ("prompt_tokens", "completion_tokens", "latency_s"):
+        for k in ("prompt_tokens", "completion_tokens", "latency_s", "retries"):
             usage[k] += u.get(k, 0) or 0
         usage["calls"] += 1
 

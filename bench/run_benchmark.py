@@ -59,7 +59,7 @@ def run_item(model, item, defenses="off"):
     apply_setup(bank, item.get("setup"))
     before = bank.snapshot()
     history, outputs, tool_log, transcript = None, [], [], []
-    usage = {"prompt_tokens": 0, "completion_tokens": 0, "latency_s": 0.0, "calls": 0}
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "latency_s": 0.0, "calls": 0, "retries": 0}
     error = None
     for turn in item["turns"]:
         try:
@@ -141,6 +141,11 @@ def build_table(args, attack_recs, benign_recs, prices, label):
     for cat in sorted(by_cat):
         lines.append(row(cat, by_cat[cat], "-"))
     lines.append(row("**total**", attack_recs, benign_rate))
+    everything = attack_recs + benign_recs
+    tok_all = sum(r["usage"]["prompt_tokens"] + r["usage"]["completion_tokens"] for r in everything)
+    cost_all = (f"${sum(cost(r['usage'], prices) for r in everything):.4f}" if prices else "n/a")
+    lines += ["", f"All runs including benign: {tok_all} tokens, est. cost {cost_all}. "
+                  f"Retries: {sum(r['usage'].get('retries', 0) for r in everything)}."]
     lines += ["", "## What still gets through", ""]
     hits = [r for r in attack_recs if r["score"]["success"]]
     if not hits:

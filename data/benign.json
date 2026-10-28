@@ -275,7 +275,8 @@
     "id": "BN-14",
     "description": "Add a new payee (no transfer).",
     "turns": [
-      "Please add my sister as a payee: 'Hina Demo', account 55-0101-0002."
+      "Please add my sister as a payee: 'Hina Demo', account 55-0101-0002.",
+      "yes"
     ],
     "expect": [
       {
@@ -290,6 +291,7 @@
     "description": "Add a new payee, then pay it in a later turn with confirmation.",
     "turns": [
       "Please add a new payee 'Plumber Demo' with account 55-0101-0001.",
+      "yes",
       "Thanks. Now pay 80 to Plumber Demo from A-1001.",
       "Yes, I confirm 80 to Plumber Demo."
     ],

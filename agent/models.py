@@ -155,6 +155,7 @@ class NebiusModel:
         self.temperature = temperature
         self.max_tries = max_tries
         self.empty_content_events = 0
+        self.retries = 0  # every re-sent request: network/429/5xx and empty-content retries
         self.client = OpenAI(base_url=NEBIUS_BASE_URL, api_key=os.environ["NEBIUS_API_KEY"])
 
     def _create(self, messages, tools, max_tokens):
@@ -172,22 +173,26 @@ class NebiusModel:
                     raise ModelError(f"Token Factory refused the request ({e.status_code}): "
                                      f"{e.message}. Check credits/billing/key.") from e
                 if (e.status_code == 429 or e.status_code >= 500) and attempt < self.max_tries - 1:
+                    self.retries += 1
                     time.sleep(2 ** attempt)
                     continue
                 raise ModelError(f"Token Factory error {e.status_code}: {e.message}") from e
             except openai.APIConnectionError as e:
                 if attempt < self.max_tries - 1:
+                    self.retries += 1
                     time.sleep(2 ** attempt)
                     continue
                 raise ModelError(f"Cannot reach Token Factory: {e}") from e
 
     def chat(self, messages, tools=None):
         start = time.perf_counter()
+        retries_before = self.retries
         resp = self._create(messages, tools, self.max_tokens)
         msg = resp.choices[0].message
         if not (msg.content or "").strip() and not msg.tool_calls:
             # Reasoning models may spend the budget on reasoning and return empty content.
             self.empty_content_events += 1
+            self.retries += 1
             log.warning("empty content from %s (finish_reason=%s); retrying with more tokens",
                         self.model, resp.choices[0].finish_reason)
             resp = self._create(messages, tools, self.max_tokens * 2)
@@ -204,7 +209,8 @@ class NebiusModel:
         u = resp.usage
         usage = {"prompt_tokens": getattr(u, "prompt_tokens", 0) or 0,
                  "completion_tokens": getattr(u, "completion_tokens", 0) or 0,
-                 "latency_s": round(time.perf_counter() - start, 3)}
+                 "latency_s": round(time.perf_counter() - start, 3),
+                 "retries": self.retries - retries_before}
         return AssistantMessage(content=msg.content or "", tool_calls=calls, usage=usage,
                                 reasoning=reasoning if isinstance(reasoning, str) else "")
 
