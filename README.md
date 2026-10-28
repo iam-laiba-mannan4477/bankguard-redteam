@@ -254,3 +254,7 @@ Results apply only to this mock assistant (synthetic bank, four tools), not to r
 ## Improvements
 
 See "Final results (frozen test split)" and docs/LAB_NOTES.md.
+
+## License
+
+MIT, see LICENSE.

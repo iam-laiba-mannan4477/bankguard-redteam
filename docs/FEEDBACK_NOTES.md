@@ -12,6 +12,7 @@ Be specific: name the tool, say what you tried, what happened, what would help.
   the onboarding screen did not show that option. Docs also disagree about whether a card is required
   (one page says card required, another says it is not).
 - Contacted Nebius via Contact us, Discord and the hackathon manager on Oct 25.
+- Outcome: I could not complete the Token Factory billing form because Pakistan is missing from the country list, and Nebius support said they could not make an exception. I was still able to apply the hackathon promo code from the console, and the credit works.
 
 ## Model and API notes
 - Tool calling on Nano and Super: works (Oct 27 entry below); all benchmark results use Nano.

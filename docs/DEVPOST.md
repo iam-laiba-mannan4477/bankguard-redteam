@@ -125,7 +125,7 @@ decided on fixes and approved the findings. Python, FastAPI and pytest; the Open
   not show that option. The docs also disagree about whether a card is required (one page says
   required, another says not).
 - I contacted Nebius through Contact us, Discord and the hackathon manager on Oct 25.
-  [OWNER: add how access was finally obtained, factually.]
+  I could not complete the Token Factory billing form because Pakistan is missing from the country list, and Nebius support said they could not make an exception. I was still able to apply the hackathon promo code from the console, and the credit works.
 - What would help: Pakistan (and other hackathon countries) in the billing list, or a promo-code
   path that skips billing, shown on the onboarding screen; one consistent docs answer on cards.
 
