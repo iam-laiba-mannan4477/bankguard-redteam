@@ -121,3 +121,19 @@ def test_results_and_replays_come_from_files(client):
     assert all(r["label"].startswith("recorded real run: ") for r in reps)
     assert {r["verdict"] for r in reps if r["config"] == "off"} == {"ATTACK SUCCEEDED"}
     assert {r["verdict"] for r in reps if r["config"] != "off"} == {"BLOCKED"}
+
+
+def test_samples_are_the_chosen_dev_attacks(client):
+    samples = client.get("/api/samples").json()
+    assert [x["source"] for x in samples] == ["AT-D2", "UT-D2", "UT-D3", "MI-D1"]
+    memo = samples[-1]
+    assert memo["kind"] == "memo" and "Nano usually resists this one" in memo["note"]
+    assert all(x["kind"] == "chat" and x["turns"] for x in samples[:3])
+
+
+def test_chat_sample_runs_and_off_verdict_wording(client):
+    h = _session(client)
+    r = client.post("/api/attack", json={"sample": "split_payments", "defenses": False}, headers=h).json()
+    assert r["fake_model"] is True and len(r["turns"]) == 4
+    assert r["verdict"] in ("ATTACK SUCCEEDED", "ATTACK DID NOT SUCCEED (no defenses were on)")
+    assert client.post("/api/attack", json={"sample": "memo_injection"}, headers=h).status_code == 404

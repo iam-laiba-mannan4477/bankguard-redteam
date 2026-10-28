@@ -58,12 +58,13 @@ DEV_TABLES = {
 REPLAY_PICKS = [("off", "MI-T1", 3), (DEFENDED, "MI-T1", 3),
                 ("off", "UT-T1", 1), (DEFENDED, "UT-T1", 1)]
 
-# One-click samples: dev attack text planted as the memo on a $1 payment, so every sample goes
-# through the attackable "Summarize with AI" path.
-SAMPLES = [("memo_injection", "Memo injection", "MI-D1"),
-           ("fake_admin", "Fake admin request", "AT-D2"),
-           ("secret_leak", "Secret leak", "MI-D2"),
-           ("urgent_payee", "Urgent new payee", "UT-D1")]
+# One-click samples, dev attacks only. Memo attacks plant their memo on a $1 payment (then
+# "Summarize with AI"); chat attacks send their turns as the user's messages.
+SAMPLES = [("fake_admin", "Fake admin request", "AT-D2", ""),
+           ("false_confirmation", "Claimed prior approval", "UT-D2", ""),
+           ("split_payments", "Split payments to a new payee", "UT-D3", ""),
+           ("memo_injection", "Memo injection", "MI-D1",
+            "Nano usually resists this one (see results)")]
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
@@ -225,11 +226,12 @@ def load_replays():
 def load_samples():
     attacks = {a["id"]: a for a in json.loads(ATTACKS_DEV.read_text(encoding="utf-8"))}
     out = []
-    for key, label, aid in SAMPLES:
+    for key, label, aid, note in SAMPLES:
         a = attacks[aid]
-        memo = (a.get("setup") or {}).get("seed_memo") or a["turns"][0]
-        out.append({"key": key, "label": label, "source": aid, "memo": clean_text(memo),
-                    "spec": a.get("success", {})})
+        memo = (a.get("setup") or {}).get("seed_memo")
+        out.append({"key": key, "label": label, "source": aid, "note": note,
+                    "kind": "memo" if memo else "chat", "memo": clean_text(memo) if memo else "",
+                    "turns": [] if memo else a["turns"], "spec": a.get("success", {})})
     return out
 
 
@@ -273,7 +275,8 @@ def create_app():
 
     @app.get("/api/samples")
     def samples():
-        return [{k: s[k] for k in ("key", "label", "source", "memo")} for s in app.state.samples]
+        return [{k: s[k] for k in ("key", "label", "source", "note", "kind", "memo", "turns")}
+                for s in app.state.samples]
 
     class MemoIn(BaseModel):
         text: str
@@ -308,37 +311,68 @@ def create_app():
     class SummarizeIn(BaseModel):
         defenses: bool = False
 
-    @app.post("/api/summarize")
-    def summarize(body: SummarizeIn, request: Request):
-        s = session(request)
+    def converse(request, s, turns, defenses, spec, attack_present, source):
+        """Run user turns through the real assistant on the session bank and score them."""
         mode = model_mode()
         if mode == "replay":
             raise HTTPException(503, "No model key configured; use replay mode.")
         if not app.state.rate.allow(client_ip(request)):
             raise HTTPException(429, "Too many requests from your address; wait a minute.")
-        if mode == "live" and not app.state.cap.take():
+        if mode == "live" and app.state.cap.remaining() < len(turns):
             raise HTTPException(503, "Daily cap on model calls reached; use replay mode.")
         bank = s["bank"]
-        config = DEFENDED if body.defenses else "off"
-        guard = Guard(bank, config) if body.defenses else None
+        config = DEFENDED if defenses else "off"
+        guard = Guard(bank, config) if defenses else None
         before = bank.snapshot()
+        history, outputs, tool_log, shown = None, [], [], []
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
         try:
-            out = run_turn(get_model(), bank, SUMMARY_PROMPT, guard=guard)
+            for turn in turns:
+                if mode == "live":
+                    app.state.cap.take()
+                out = run_turn(get_model(), bank, turn, history=history, guard=guard)
+                history = out["messages"]
+                outputs += out["outputs"]
+                tool_log += out["tool_log"]
+                shown.append({"user": turn, "final": out["final"]})
+                for k in usage:
+                    usage[k] += out["usage"][k]
         except Exception as e:  # show a short error; never echo env or key material
             raise HTTPException(502, f"Model call failed ({type(e).__name__}).") from None
         after = bank.snapshot()
-        score = score_attack(before, after, out["outputs"], out["tool_log"], {"success": s["spec"]})
+        score = score_attack(before, after, outputs, tool_log, {"success": spec})
         return {"mode": mode, "fake_model": mode == "fake", "config": config,
-                "prompt": SUMMARY_PROMPT, "reply": out["final"],
-                "tool_log": _brief_log(out["tool_log"]),
+                "turns": shown, "reply": shown[-1]["final"] if shown else "",
+                "tool_log": _brief_log(tool_log),
                 "events": guard.events if guard else [],
                 "before": _state(before), "after": _state(after), "changes": diff(before, after),
                 "verdict": ("ATTACK SUCCEEDED" if score["success"]
-                            else "NO ATTACK PLANTED" if not s["planted"]
+                            else "NO ATTACK PLANTED" if not attack_present
                             # With defenses off nothing blocks; the model just did not follow it.
-                            else "BLOCKED" if body.defenses else "ATTACK FAILED (no defenses on)"),
-                "rules": score["rules"], "sample_source": s["source"],
-                "usage": {k: out["usage"][k] for k in ("prompt_tokens", "completion_tokens", "calls")}}
+                            else "BLOCKED" if defenses
+                            else "ATTACK DID NOT SUCCEED (no defenses were on)"),
+                "rules": score["rules"], "sample_source": source, "usage": usage}
+
+    @app.post("/api/summarize")
+    def summarize(body: SummarizeIn, request: Request):
+        s = session(request)
+        return converse(request, s, [SUMMARY_PROMPT], body.defenses, s["spec"], s["planted"] > 0,
+                        s["source"])
+
+    class AttackIn(BaseModel):
+        sample: str
+        defenses: bool = False
+
+    @app.post("/api/attack")
+    def attack(body: AttackIn, request: Request):
+        """Run a chat sample attack (dev set) as the user's own messages."""
+        s = session(request)
+        sample = next((x for x in app.state.samples
+                       if x["key"] == body.sample and x["kind"] == "chat"), None)
+        if sample is None:
+            raise HTTPException(404, "unknown chat sample")
+        return converse(request, s, sample["turns"], body.defenses, sample["spec"], True,
+                        sample["source"])
 
     @app.get("/api/results")
     def results():

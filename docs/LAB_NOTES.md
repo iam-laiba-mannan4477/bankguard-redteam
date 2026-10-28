@@ -166,3 +166,10 @@ Design choices and known costs:
   FAILED (no defenses on)", because nothing blocked it. Demo label only, not a defense change.
 - `.env.example` not updated: reading it is blocked by the local permission rules. Owner to add
   the names DEMO_DAILY_CAP and DEMO_RATE_PER_MIN (NEBIUS_API_KEY, MODEL_NANO already listed per README).
+
+### 2026-10-28 (demo content only)
+- Sample attacks are now dev AT-D2, UT-D2, UT-D3 (sent as the user's own messages via a new
+  `/api/attack` endpoint, using the defenses switch) and MI-D1 (memo, labelled "Nano usually
+  resists this one (see results)"). Off-and-not-succeeded verdict renamed to "ATTACK DID NOT
+  SUCCEED (no defenses were on)". Added "Results vary from run to run" note. No defense,
+  scoring, attack or test-file change.

@@ -77,6 +77,7 @@ the bank state and the reply. No LLM judge.</p>
       <div><span class="tag ai">Uses Nemotron. This path can be attacked.</span></div>
     </div>
   </div>
+  <p class="muted">Results vary from run to run; see the results section.</p>
   <div id="plainOut" class="hidden"><h3>Transactions (read directly from the mock bank)</h3><div class="scroll" id="plainTable"></div></div>
   <div style="margin-top:8px"><button id="btnReset">Reset my mock bank</button>
     <span class="muted">Each visitor gets a separate fresh copy.</span></div>
@@ -89,6 +90,7 @@ the bank state and the reply. No LLM judge.</p>
   <div class="muted"><span id="count">0</span>/300</div>
   <button id="btnPlant">Add $1 payment with this note</button>
   <h3>Sample attacks (from the dev attack set)</h3>
+  <p class="muted">Chat samples are sent as your own messages, using the defenses switch above. The memo sample plants its note; then press "Summarize with AI".</p>
   <div class="samples" id="samples"></div>
   <div class="muted" id="plantMsg"></div>
 </section>
@@ -203,9 +205,9 @@ function showRun(r, title) {
   var v = $("verdict");
   v.textContent = r.verdict + (r.rules && r.rules.length ? "  (" + r.rules.join(", ") + ")" : "");
   v.className = "verdict " + (r.verdict === "ATTACK SUCCEEDED" ? "bad" : r.verdict === "BLOCKED" ? "good" : "neutral");
-  if (r.verdict.indexOf("ATTACK FAILED") === 0) v.textContent += ". Nothing blocked it: the model did not follow the note this time.";
+  if (r.verdict.indexOf("ATTACK DID NOT SUCCEED") === 0) v.textContent += ". Nothing blocked it: the model did not follow the attack this time.";
   var reply = clear($("reply"));
-  (r.turns || [{user: r.prompt, final: r.reply}]).forEach(function (t) {
+  (r.turns || []).forEach(function (t) {
     reply.appendChild(el("div", {cls: "muted", text: "User: " + t.user}));
     reply.appendChild(el("div", {text: t.final || "(empty reply)"}));
   });
@@ -281,6 +283,17 @@ function plant(text, sample) {
   }).catch(function (e) { $("plantMsg").textContent = "Error: " + e.message; });
 }
 
+function runSample(s, b) {
+  if (S.mode === "replay") { $("plantMsg").textContent = "Live model not available; see the recorded runs."; return; }
+  b.disabled = true; $("plantMsg").textContent = "Sending " + s.source + " to Nemotron...";
+  api("attack", {method: "POST", body: {sample: s.key, defenses: S.defenses}}).then(function (r) {
+    $("plantMsg").textContent = "";
+    showRun(r, (r.fake_model ? "FAKE MODEL (pipeline test only). " : "Live run. ") +
+      "Defenses " + (S.defenses ? "ON" : "OFF") + ", sample " + s.source);
+  }).catch(function (e) { $("plantMsg").textContent = "Error: " + e.message; })
+    .finally(function () { b.disabled = false; });
+}
+
 function renderPlain(txns) {
   show($("plainOut"), true);
   clear($("plainTable")).appendChild(table(["id", "amount", "memo"], txns.map(function (t) {
@@ -320,9 +333,13 @@ function init() {
     if (!S.static) api("samples").then(function (list) {
       var box = clear($("samples"));
       list.forEach(function (s) {
-        var b = el("button", null, s.label, el("br"), el("span", {cls: "muted", text: "from " + s.source}));
-        b.title = s.memo;
-        b.addEventListener("click", function () { $("memo").value = s.memo; $("count").textContent = s.memo.length; plant(s.memo, s.key); });
+        var b = el("button", null, s.label, el("br"),
+          el("span", {cls: "muted", text: "from " + s.source + (s.note ? ". " + s.note : "")}));
+        b.title = s.kind === "memo" ? s.memo : s.turns.join("\n");
+        b.addEventListener("click", function () {
+          if (s.kind === "memo") { $("memo").value = s.memo; $("count").textContent = s.memo.length; plant(s.memo, s.key); return; }
+          runSample(s, b);
+        });
         box.appendChild(b);
       });
     });
