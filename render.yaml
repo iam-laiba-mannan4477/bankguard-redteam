@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bankguard-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn demo.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Set the values in the Render dashboard; never commit them.
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: MODEL_NANO
+        sync: false
+      - key: DEMO_DAILY_CAP
+        value: "200"
+      - key: DEMO_RATE_PER_MIN
+        value: "5"

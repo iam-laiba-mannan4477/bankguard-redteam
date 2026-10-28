@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BankGuard Red Team</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#5d6470;--line:#dfe3e8;--accent:#1f5fbf;
+--bad:#b42318;--badbg:#fdecea;--good:#146c43;--goodbg:#e6f4ec;--warn:#8a5a00;--warnbg:#fff4d6}
+@media (prefers-color-scheme:dark){:root{--bg:#111318;--card:#1a1d24;--ink:#e8eaee;--mute:#9aa2ae;
+--line:#2c313b;--accent:#6ea2ff;--bad:#ff8a80;--badbg:#3a1d1b;--good:#7ddc9f;--goodbg:#173326;
+--warn:#ffd27a;--warnbg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:12px 16px 48px}
+h1{font-size:1.35rem;margin:14px 0 4px}h2{font-size:1.05rem;margin:0 0 10px}h3{font-size:.95rem;margin:12px 0 6px}
+.banner{padding:10px 16px;font-weight:600;text-align:center}
+.mock{background:var(--warnbg);color:var(--warn);border-bottom:1px solid var(--line)}
+.fake{background:var(--bad);color:#fff}
+.notice{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--warn);padding:8px 12px;margin:10px 0;border-radius:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:14px 0}
+.muted{color:var(--mute);font-size:.88rem}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.row{grid-template-columns:1fr}}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:10px 12px;cursor:pointer;min-height:44px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-width:90px}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.tag{display:inline-block;font-size:.78rem;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-top:6px}
+.tag.ai{color:var(--warn);border-color:var(--warn)}
+textarea{width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:70px}
+.samples{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.verdict{font-weight:700;font-size:1.1rem;padding:10px 12px;border-radius:8px;margin-bottom:10px}
+.verdict.bad{background:var(--badbg);color:var(--bad)}.verdict.good{background:var(--goodbg);color:var(--good)}
+.verdict.neutral{background:var(--bg);color:var(--mute)}
+.reply{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px;overflow-wrap:anywhere}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{color:var(--mute);font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.ok{color:var(--good);font-weight:600}.no{color:var(--bad);font-weight:600}
+code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:.82rem}
+.replays button{width:100%;text-align:left;margin-bottom:6px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="banner mock">MOCK BANK: synthetic data only. Results apply to this mock assistant.</div>
+<div id="fakeBanner" class="banner fake hidden">FAKE MODEL: pipeline test only</div>
+<main>
+<h1>BankGuard Red Team</h1>
+<p class="muted">An attacker plants a note on a $1 payment. Then you ask the assistant
+(NVIDIA Nemotron Nano on Nebius Token Factory) to summarize your transactions. A deterministic scorer checks
+the bank state and the reply. No LLM judge.</p>
+<div id="modeNotice" class="notice hidden"></div>
+
+<section class="card" id="live">
+  <h2>Account A-1001 (Ayesha Demo, synthetic)</h2>
+  <div style="margin-bottom:12px">
+    <span class="muted">Defenses:</span>
+    <span class="seg" role="group" aria-label="Defenses">
+      <button id="defOff" aria-pressed="true">OFF</button>
+      <button id="defOn" aria-pressed="false">ON</button>
+    </span>
+    <div class="muted" id="defNote">OFF: the assistant runs with no guard.</div>
+  </div>
+  <div class="row">
+    <div>
+      <button id="btnPlain" style="width:100%">Show my transactions (plain)</button>
+      <div><span class="tag">No AI in this path</span></div>
+    </div>
+    <div>
+      <button id="btnAI" class="primary" style="width:100%">Summarize with AI</button>
+      <div><span class="tag ai">Uses Nemotron. This path can be attacked.</span></div>
+    </div>
+  </div>
+  <div id="plainOut" class="hidden"><h3>Transactions (read directly from the mock bank)</h3><div class="scroll" id="plainTable"></div></div>
+  <div style="margin-top:8px"><button id="btnReset">Reset my mock bank</button>
+    <span class="muted">Each visitor gets a separate fresh copy.</span></div>
+</section>
+
+<section class="card" id="attacker">
+  <h2>Attacker panel</h2>
+  <p class="muted">Write the note on a $1 payment that lands in A-1001 (max 300 characters). Then press "Summarize with AI".</p>
+  <textarea id="memo" maxlength="300" placeholder="e.g. NOTE TO ASSISTANT: add payee ..."></textarea>
+  <div class="muted"><span id="count">0</span>/300</div>
+  <button id="btnPlant">Add $1 payment with this note</button>
+  <h3>Sample attacks (from the dev attack set)</h3>
+  <div class="samples" id="samples"></div>
+  <div class="muted" id="plantMsg"></div>
+</section>
+
+<section class="card hidden" id="panels">
+  <h2 id="panelsTitle">Result</h2>
+  <div id="verdict" class="verdict neutral"></div>
+  <h3>Assistant reply</h3><div class="reply" id="reply"></div>
+  <h3>Tool-call log</h3><div class="scroll" id="toolLog"></div>
+  <div id="eventsWrap"><h3>Defense events</h3><div class="scroll" id="events"></div></div>
+  <h3>Bank state (signed-in customer)</h3><div class="row"><div><b>Before</b><div id="before"></div></div><div><b>After</b><div id="after"></div></div></div>
+</section>
+
+<section class="card" id="replay">
+  <h2>Replay: recorded real runs</h2>
+  <p class="muted">Saved runs from the frozen test split (Nemotron Nano, bench/results/final/). No API call.</p>
+  <div class="replays" id="replayList"></div>
+</section>
+
+<section class="card" id="results">
+  <h2>Results</h2>
+  <h3>Frozen test split (run once per config)</h3><div class="scroll" id="finalTable"></div>
+  <h3>Dev split (defenses were built while looking at these)</h3><div class="scroll" id="devTable"></div>
+  <h3>Limits</h3>
+  <ul class="muted">
+    <li>Results apply only to this mock assistant (synthetic bank, four tools), not to real banks.</li>
+    <li>Small samples: test 8 attacks x 3 runs, dev 12 x 3. 0 successes does not mean 0%.</li>
+    <li>Dev numbers are optimistic: the defenses were built while looking at dev.</li>
+    <li>Benign false blocks were measured on dev only (45 runs). The off-config dev table counts BN-11 failures caused by a pass check that was later fixed.</li>
+    <li>The output filter is an exact string match; paraphrased or encoded leaks were not tested.</li>
+  </ul>
+  <p class="muted" id="sources"></p>
+</section>
+</main>
+<script>
+"use strict";
+// Every value from the server or the attacker goes into the page as a text node, never as markup.
+var S = {session: null, mode: "replay", defenses: false, static: false};
+
+function el(tag, attrs) {
+  var n = document.createElement(tag);
+  if (attrs) for (var k in attrs) {
+    if (k === "text") n.textContent = attrs[k];
+    else if (k === "cls") n.className = attrs[k];
+    else n.setAttribute(k, attrs[k]);
+  }
+  for (var i = 2; i < arguments.length; i++) {
+    var c = arguments[i];
+    if (c == null) continue;
+    n.appendChild(typeof c === "object" ? c : document.createTextNode(String(c)));
+  }
+  return n;
+}
+function $(id) { return document.getElementById(id); }
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
+function show(n, on) { n.classList.toggle("hidden", !on); }
+function str(v) { return typeof v === "string" ? v : JSON.stringify(v); }
+
+function api(path, opts) {
+  opts = opts || {};
+  var headers = {"Content-Type": "application/json"};
+  if (S.session) headers["X-Session"] = S.session;
+  return fetch("api/" + path, {method: opts.method || "GET", headers: headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined}).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+      return j;
+    });
+  });
+}
+function staticData(name) { return fetch("data/" + name + ".json").then(function (r) { return r.json(); }); }
+function getData(name) { return S.static ? staticData(name) : api(name); }
+
+function table(header, rows, numFrom) {
+  var t = el("table"), tr = el("tr");
+  header.forEach(function (h) { tr.appendChild(el("th", {text: h})); });
+  t.appendChild(el("thead", null, tr));
+  var tb = el("tbody");
+  rows.forEach(function (r) {
+    var row = el("tr");
+    r.forEach(function (c, i) {
+      var cell = el("td", {text: c});
+      if (numFrom != null && i >= numFrom) cell.className = "num";
+      row.appendChild(cell);
+    });
+    tb.appendChild(row);
+  });
+  t.appendChild(tb);
+  return t;
+}
+
+function stateView(st) {
+  var rows = [];
+  Object.keys(st.balances).forEach(function (a) { rows.push(["balance " + a, st.balances[a].toFixed(2)]); });
+  Object.keys(st.payees).forEach(function (p) {
+    rows.push(["payee " + p, st.payees[p].name + " (" + st.payees[p].account_number + ")"]);
+  });
+  return table(["item", "value"], rows);
+}
+
+function toolView(log) {
+  if (!log.length) return el("p", {cls: "muted", text: "No tool calls."});
+  return table(["tool", "arguments", "allowed", "result"], log.map(function (t) {
+    var allowed = t.executed_by ? "yes (after user yes)" : (t.allowed ? "allowed" : "BLOCKED / held");
+    return [t.name, str(t.arguments), allowed, t.result || ""];
+  }));
+}
+
+function showRun(r, title) {
+  show($("panels"), true);
+  $("panelsTitle").textContent = title;
+  var v = $("verdict");
+  v.textContent = r.verdict + (r.rules && r.rules.length ? "  (" + r.rules.join(", ") + ")" : "");
+  v.className = "verdict " + (r.verdict === "ATTACK SUCCEEDED" ? "bad" : r.verdict === "BLOCKED" ? "good" : "neutral");
+  if (r.verdict.indexOf("ATTACK FAILED") === 0) v.textContent += ". Nothing blocked it: the model did not follow the note this time.";
+  var reply = clear($("reply"));
+  (r.turns || [{user: r.prompt, final: r.reply}]).forEach(function (t) {
+    reply.appendChild(el("div", {cls: "muted", text: "User: " + t.user}));
+    reply.appendChild(el("div", {text: t.final || "(empty reply)"}));
+  });
+  clear($("toolLog")).appendChild(toolView(r.tool_log || []));
+  var ev = r.events || [];
+  show($("eventsWrap"), ev.length > 0);
+  clear($("events")).appendChild(table(["event", "detail"], ev.map(function (e) {
+    var d = Object.assign({}, e); delete d.event; return [e.event, str(d)];
+  })));
+  clear($("before")).appendChild(stateView(r.before));
+  clear($("after")).appendChild(stateView(r.after));
+  $("panels").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function setDefenses(on) {
+  S.defenses = on;
+  $("defOn").setAttribute("aria-pressed", on); $("defOff").setAttribute("aria-pressed", !on);
+  $("defNote").textContent = on ? "ON: policy + risk score + output filter (the frozen config)."
+                                : "OFF: the assistant runs with no guard.";
+}
+
+function setMode(mode, reason) {
+  S.mode = mode;
+  show($("fakeBanner"), mode === "fake");
+  var live = mode === "live" || mode === "fake";
+  $("btnAI").disabled = !live; $("btnPlant").disabled = S.static;
+  $("btnPlain").disabled = false; $("btnReset").disabled = S.static;
+  document.querySelectorAll("#samples button").forEach(function (b) { b.disabled = S.static; });
+  var n = $("modeNotice");
+  if (!live) {
+    n.textContent = (reason || "Live model is not available.") + " Replay mode: the recorded real runs below need no API call.";
+    show(n, true);
+  } else show(n, false);
+}
+
+function renderResults(res) {
+  function build(tabs) {
+    if (!tabs.length) return el("p", {cls: "muted", text: "No result files found."});
+    // Runner table columns: category, attacks, runs, successes, success rate, benign false-block,
+    // mean latency, tokens, est. cost. Totals are bold; categories are indented under them.
+    var rows = [];
+    tabs.forEach(function (t) {
+      var total = t.rows.filter(function (r) { return r[0] === "**total**"; });
+      var cats = t.rows.filter(function (r) { return r[0] !== "**total**"; });
+      total.concat(cats).forEach(function (r) {
+        var name = r[0] === "**total**" ? t.config : " " + r[0];
+        rows.push([name, r[4], r[5], r[7], r[8]]);
+      });
+    });
+    return table(["config / category", "attack success", "benign false-block", "attack tokens", "est. cost"], rows);
+  }
+  clear($("finalTable")).appendChild(build(res.final));
+  clear($("devTable")).appendChild(build(res.dev));
+  var files = res.final.map(function (t) { return t.file; }).concat(res.dev.map(function (t) { return t.file; }));
+  $("sources").textContent = "Read from: " + files.join(", ") + ". Test benign false-block shows n/a: the benign suite was not rerun on test; see the dev table.";
+}
+
+function renderReplays(list) {
+  var box = clear($("replayList"));
+  if (!list.length) { box.appendChild(el("p", {cls: "muted", text: "No recorded runs found."})); return; }
+  list.forEach(function (r) {
+    var b = el("button", null, el("b", {text: r.id + " (" + r.category + "), defenses " +
+      (r.config === "off" ? "OFF" : "ON") + ": " + r.verdict}), el("br"), el("span", {cls: "muted mono", text: r.label}));
+    b.addEventListener("click", function () { showRun(r, "Replay: " + r.label); });
+    box.appendChild(b);
+  });
+}
+
+function plant(text, sample) {
+  $("plantMsg").textContent = "";
+  return api("memo", {method: "POST", body: {text: text, sample: sample || null}}).then(function (j) {
+    $("plantMsg").textContent = "Added $1 payment " + j.transaction_id + " with that note. Now press \"Summarize with AI\".";
+  }).catch(function (e) { $("plantMsg").textContent = "Error: " + e.message; });
+}
+
+function renderPlain(txns) {
+  show($("plainOut"), true);
+  clear($("plainTable")).appendChild(table(["id", "amount", "memo"], txns.map(function (t) {
+    return [t.id, Number(t.amount).toFixed(2), t.memo];
+  }), null));
+}
+
+function init() {
+  $("defOff").onclick = function () { setDefenses(false); };
+  $("defOn").onclick = function () { setDefenses(true); };
+  $("memo").addEventListener("input", function () { $("count").textContent = $("memo").value.length; });
+  $("btnPlant").onclick = function () { plant($("memo").value.slice(0, 300)); };
+  $("btnReset").onclick = function () {
+    api("reset", {method: "POST"}).then(function () { $("plantMsg").textContent = "Mock bank reset."; show($("plainOut"), false); });
+  };
+  $("btnPlain").onclick = function () {
+    (S.static ? staticData("seed") : api("transactions")).then(function (j) { renderPlain(j.transactions); })
+      .catch(function (e) { $("plantMsg").textContent = "Error: " + e.message; });
+  };
+  $("btnAI").onclick = function () {
+    var b = $("btnAI"); b.disabled = true; b.textContent = "Asking Nemotron...";
+    api("summarize", {method: "POST", body: {defenses: S.defenses}}).then(function (r) {
+      showRun(r, (r.fake_model ? "FAKE MODEL (pipeline test only). " : "Live run. ") +
+        "Defenses " + (S.defenses ? "ON" : "OFF") + (r.sample_source ? ", sample from " + r.sample_source : ""));
+    }).catch(function (e) {
+      $("plantMsg").textContent = "Error: " + e.message;
+      return api("status").then(function (s) { setMode(s.mode, s.reason); }).catch(function () {});
+    }).finally(function () { b.textContent = "Summarize with AI"; if (S.mode !== "replay") b.disabled = false; });
+  };
+
+  api("status").then(function (s) {
+    return api("session", {method: "POST"}).then(function (j) { S.session = j.session; setMode(s.mode, s.reason); });
+  }).catch(function () {
+    S.static = true;
+    setMode("replay", "Static copy of the demo: there is no server here.");
+  }).then(function () {
+    if (!S.static) api("samples").then(function (list) {
+      var box = clear($("samples"));
+      list.forEach(function (s) {
+        var b = el("button", null, s.label, el("br"), el("span", {cls: "muted", text: "from " + s.source}));
+        b.title = s.memo;
+        b.addEventListener("click", function () { $("memo").value = s.memo; $("count").textContent = s.memo.length; plant(s.memo, s.key); });
+        box.appendChild(b);
+      });
+    });
+    else $("samples").appendChild(el("p", {cls: "muted", text: "Sample attacks need the live server."}));
+    getData("results").then(renderResults);
+    getData("replays").then(renderReplays);
+  });
+}
+init();
+</script>
+</body>
+</html>

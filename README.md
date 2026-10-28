@@ -34,11 +34,40 @@ python -m bench.run_benchmark --model nebius --size nano --split dev --runs 3 --
 `--defenses` takes `off`, `policy`, `policy+risk` or `policy+risk+filter`. Logs and tables go to
 `bench/results/`.
 
-Run the demo (not built yet; this will be the command):
+### Demo
+
+Local, Windows (PowerShell, with the venv active), then open http://127.0.0.1:8000 :
 
 ```
-uvicorn demo.app:app --reload
+$env:DEMO_MODEL="fake"; uvicorn demo.app:app --reload     # FAKE model: pipeline test only, page shows a red banner
+Remove-Item Env:DEMO_MODEL; uvicorn demo.app:app --reload # real Nano, uses NEBIUS_API_KEY + MODEL_NANO from .env
 ```
+
+The page has a plain "Show my transactions" button (fixed code, no AI), a "Summarize with AI"
+button (Nemotron Nano, the attackable path), an attacker panel that plants a note on a $1
+payment, live tool-call / bank-state / scorer panels, 4 recorded real runs from
+`bench/results/final/` (replay needs no API call) and the results tables read from the result files.
+
+Demo environment variables (server only; never sent to the browser):
+
+| variable | meaning | default |
+|---|---|---|
+| `NEBIUS_API_KEY` | Token Factory key; without it the page falls back to replay mode | none |
+| `MODEL_NANO` | Nemotron Nano model ID from the Token Factory list | none |
+| `DEMO_DAILY_CAP` | global model-call cap per day (summaries); then replay mode | 200 |
+| `DEMO_RATE_PER_MIN` | summaries per minute per IP | 5 |
+| `DEMO_ALLOWED_ORIGINS` | optional comma-separated CORS origins (same-origin needs none) | none |
+| `DEMO_MODEL` | `fake` for local pipeline tests only | unset |
+
+Each visitor gets a fresh mock bank. Model calls use max 800 tokens, a 30 s timeout and no retries.
+
+**Deploy on Render:** `render.yaml` is included. Start command:
+`uvicorn demo.app:app --host 0.0.0.0 --port $PORT`. Set `NEBIUS_API_KEY` and `MODEL_NANO` in the
+Render dashboard (Environment), not in git.
+
+**Static copy (Hugging Face Static Space, no server, no key):** `python -m demo.export_static`
+writes `demo/static_site/` (index.html + data/*.json from `bench/results/final/`). Upload that
+folder's contents. It shows replay mode and the results only.
 
 ## Nebius and NVIDIA usage
 
