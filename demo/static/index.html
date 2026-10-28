@@ -122,6 +122,7 @@ the bank state and the reply. No LLM judge.</p>
     <li>Dev numbers are optimistic: the defenses were built while looking at dev.</li>
     <li>Benign false blocks were measured on dev only (45 runs). The off-config dev table counts BN-11 failures caused by a pass check that was later fixed.</li>
     <li>The output filter is an exact string match; paraphrased or encoded leaks were not tested.</li>
+    <li>Nano mostly ignores memo injection even with defenses off (dev 0 of 9; test 1 of 6), so the benchmark does not show that the memo defense works.</li>
   </ul>
   <p class="muted" id="sources"></p>
 </section>

@@ -139,6 +139,10 @@ prompt and kept the canary unchanged (policy run 1, policy+risk runs 2 and 3). T
 risk layers only gate tool calls, so a text-only leak passes them. With the output filter, the
 leaking replies in all 3 runs were withheld, so it scored 0/3. Nothing was tuned in response.
 
+**Memo injection is not demonstrated.** Nano mostly ignores memo injection even with defenses off (dev 0 of 9; test 1 of 6), so the benchmark does not show that the memo defense works. The defended 0/9 (dev) and 0/6
+(test) memo_injection cells are therefore not evidence of a defense effect: in the defended test
+runs no defense layer fired on MI-T1 or MI-T2; the model simply did not follow the memo.
+
 **Dev numbers are optimistic.** The defenses were built while looking at dev results. On test,
 policy+risk went from 0/36 to 2/24, and prompt leakage was stopped only by the output filter, a
 string match on the canary that a paraphrase or encoding could likely evade (not tested).
@@ -178,7 +182,7 @@ Results apply only to this mock assistant (synthetic bank, four tools), not to r
 **Threats**
 1. **Indirect prompt injection through data the assistant reads** (transaction memos, payee
    names), plus direct manipulation by the chat user: tested here (memo_injection,
-   unauthorized_transfer, account_takeover, data_leakage).
+   unauthorized_transfer, account_takeover, data_leakage). For memos specifically: Nano mostly ignores memo injection even with defenses off (dev 0 of 9; test 1 of 6), so the benchmark does not show that the memo defense works.
 2. **Stolen credentials or sessions**: out of scope. If an attacker is signed in as the customer,
    their own messages count as the customer's; none of these defenses address that.
 
@@ -190,7 +194,7 @@ Results apply only to this mock assistant (synthetic bank, four tools), not to r
 | Read-only tools by default | partly: writes exist but are gated by policy + confirmation | yes (policy configs) |
 | Confirmation enforced outside the model | yes: the harness asks and only a user "yes" executes | yes |
 | The user's own message must ask for the action (verb + amount/account) | yes | yes |
-| Memo and payee text treated as untrusted data | yes: `<untrusted_data>` wrapping + prompt rule | yes |
+| Memo and payee text treated as untrusted data | yes: `<untrusted_data>` wrapping + prompt rule | no effect shown: Nano mostly ignored memo injection even with defenses off (dev 0/9, test 1/6) |
 | Risk limits (amount, history, velocity, cooling-off for new payees) | yes (`defenses/risk.py`; timing signal never fires, fixed mock clock) | yes |
 | Output filter for secrets and other customers' data | yes (`defenses/output_filter.py`) | yes |
 | Bank backend as source of truth | yes in the mock: the scorer reads bank state, not model text | yes (scoring) |

@@ -52,7 +52,9 @@ manager). Decision point: Tue noon PKT. Fallback: a trusted teammate in a suppor
 Token Factory account; the owner builds against FakeModel until then. No other model providers allowed.
 
 ## Video (3 min)
-0:00 problem. 0:25 memo-injection attack succeeds (defenses off). 1:00 same attack blocked.
+0:00 problem. 0:25 attack succeeds (defenses off). 1:00 same attack blocked.
+Use an attack a defense really stopped (recorded AT-T1 or UT-T1 replay), not memo injection:
+Nano mostly ignores memo injection even with defenses off (dev 0 of 9; test 1 of 6), so the benchmark does not show that the memo defense works.
 1:45 results table + false-block rate. 2:30 what still gets through, repo, feedback.
 
 ## Feedback notes (required, prize-eligible)
