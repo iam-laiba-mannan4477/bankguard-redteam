@@ -1,6 +1,7 @@
 # BankGuard Red Team
 
 **Hosted demo: https://huggingface.co/spaces/Laiba-147/bankguard-redteam**
+Demo video: https://youtu.be/6D0_nL1T0gQ
 Hosted page = replay of recorded real runs; the live demo runs locally (see Setup and run).
 
 Red-teaming a mock bank AI assistant with NVIDIA Nemotron on Nebius Token Factory.
@@ -258,3 +259,7 @@ See "Final results (frozen test split)" and docs/LAB_NOTES.md.
 ## License
 
 MIT, see LICENSE.
+
+## Demo video
+
+Watch the 3-minute demo: https://youtu.be/6D0_nL1T0gQ
