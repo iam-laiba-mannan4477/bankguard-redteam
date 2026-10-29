@@ -9,7 +9,7 @@ Best Apps and Agents
 ## Links
 - Repo: https://github.com/iam-laiba-mannan4477/bankguard-redteam
 - Hosted page (replay of recorded real runs): https://huggingface.co/spaces/Laiba-147/bankguard-redteam
-- Video: [VIDEO LINK: add the public YouTube URL]
+- Video: https://youtu.be/6D0_nL1T0gQ
 
 ## Built with
 Nebius Token Factory, NVIDIA Nemotron (Nemotron 3 Nano), Python, FastAPI, uvicorn, openai SDK
